@@ -1,8 +1,8 @@
-variable "databaseservername" {
+variable "sql_servername" {
   type        = string
   description = "The name of the Microsoft SQL Server. This needs to be globally unique within Azure"
 }
-variable "databaseResourceGroup" {
+variable "sql_resourcegroup" {
   type        = string
   description = "The name of the resource group in which to create the Microsoft SQL Server."
 
@@ -24,17 +24,11 @@ variable "email" {
   description = "Email address to be used for SQL admin account and alerts"
 }
 
-variable "objectid" {
-  type        = string
-  description = "Object Id of the email for SQL admin account and alerts"
-
-}
-variable "azuresqlstorageaccount" {
+variable "sql_storageaccount" {
   type        = string
   description = "Threat Detection & audit storage account"
 
 }
-
 variable "sqldatabase_name" {
   type        = list(string)
   description = "List of the sql database names"

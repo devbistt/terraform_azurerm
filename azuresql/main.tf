@@ -1,6 +1,13 @@
+provider "azurerm" {
+  features {}  
+}
+
+data "azurerm_client_config" "current" {
+}
+
 data "azurerm_storage_account" "storageaccount" {
   name                = var.sql_storageaccount
-  resource_group_name = var.sql_databaseResourceGroup
+  resource_group_name = var.sql_resourcegroup
 }
 
 data "azurerm_subnet" "azuresql_subnet" {
@@ -23,16 +30,16 @@ resource "random_password" "sql_admin_password" {
   min_numeric      = 1
 }
 resource "azurerm_key_vault_secret" "key_vault_sql_username" {
-  name         = var.sql_server_administrator_login
-  value        = var.sql_server_administrator_login
-  key_vault_id = data.azurerm_key_vault.kv.id
-  content_type = "${var.sql_server_administrator_login} username"
+  name         = var.sqladminuser
+  value        = var.sqladminuser
+  key_vault_id = var.keyvault_id
+  content_type = "${var.sqladminuser} username"
 }
 resource "azurerm_key_vault_secret" "key_vault_sql_password" {
-  name         = "${var.sql_server_administrator_login}Password"
+  name         = "${var.sqladminuser}Password"
   value        = random_password.sql_admin_password.result
-  key_vault_id = data.azurerm_key_vault.kv.id
-  content_type = "${var.sql_server_administrator_login} password"
+  key_vault_id = var.keyvault_id
+  content_type = "${var.sqladminuser} password"
 }
 resource "azurerm_storage_container" "azuresqlvulnerability_container" {
   name                  = "vulnerability-assessment"
@@ -40,16 +47,16 @@ resource "azurerm_storage_container" "azuresqlvulnerability_container" {
   container_access_type = "private"
 }
 resource "azurerm_mssql_server" "azuresql_server" {
-  name                         = var.sql_server_name
-  resource_group_name          = var.sql_databaseResourceGroup
-  location                     = var.sql_server_location
+  name                         = var.sql_servername
+  resource_group_name          = var.sql_resourcegroup
+  location                     = var.databaseserverlocation
   version                      = "12.0"
-  administrator_login          = var.sql_server_administrator_login
+  administrator_login          = var.sqladminuser
   administrator_login_password = random_password.sql_admin_password.result
   minimum_tls_version          = "1.2"
   azuread_administrator {
     login_username = var.email
-    object_id      = ""
+    object_id      = data.azurerm_client_config.current.object_id
   }
   identity {
     type = "SystemAssigned"
@@ -129,7 +136,7 @@ resource "azurerm_mssql_server_extended_auditing_policy" "azuresqlserverextended
 }
 
 resource "azurerm_mssql_server_security_alert_policy" "azuresqlserver_security_alert_policy" {
-  resource_group_name        = var.databaseResourceGroup
+  resource_group_name        = var.sql_resourcegroup
   server_name                = azurerm_mssql_server.azuresql_server.name
   state                      = "Enabled"
   storage_endpoint           = local.storage_account.primary_blob_endpoint
@@ -148,7 +155,7 @@ resource "azurerm_mssql_server_vulnerability_assessment" "azuresqlserver_vulnera
   recurring_scans {
     enabled                   = true
     email_subscription_admins = false
-    emails                    = [""]
+    emails                    = [var.email]
   }
 
 }
@@ -189,17 +196,4 @@ resource "azurerm_mssql_database_extended_auditing_policy" "azuresql_database_au
   storage_account_access_key_is_secondary = false
   retention_in_days                       = 10
   log_monitoring_enabled                  = true
-}
-
-// Enable automatic tuning
-resource "null_resource" "automatictuning" {
-  depends_on = [azurerm_mssql_database.azuresql_database]
-
-  triggers = {
-    always_run = timestamp()
-  }
-
-  provisioner "local-exec" {
-    command = "sqlcmd -S ${azurerm_mssql_server.azuresql_server.name}.database.windows.net -d ${azurerm_mssql_database.azuresql_database.name} -U ${var.sqladminuser} -P ${random_password.sql_admin_password.result} -i ./auto-tuning.sql"
-  }
 }
